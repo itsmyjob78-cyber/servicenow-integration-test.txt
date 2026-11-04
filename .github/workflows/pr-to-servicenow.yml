@@ -49,6 +49,9 @@ jobs:
           : "${SN_PASS:?Missing SN_PASS secret}"
 
           API="${SN_INSTANCE%/}/api/now/table/change_request"
+          
+echo "Checking ServiceNow API connection..."
+echo "API endpoint: ${API}"
 
           LOOKUP=$(curl --fail --silent --show-error --get \
             --user "${SN_USER}:${SN_PASS}" \
