@@ -67,9 +67,10 @@ if [ "${HTTP_CODE}" != "200" ]; then
   exit 1
 fi
 
-LOOKUP=$(curl --fail --silent --show-error --get \
+LOOKUP=$(curl --silent --show-error --get \
   --user "${SN_USER}:${SN_PASS}" \
   --header "Accept: application/json" \
+  --write-out "\nHTTP_STATUS:%{http_code}" \
   "${API}" \
   --data-urlencode "sysparm_query=correlation_id=${PR_URL}" \
   --data-urlencode "sysparm_fields=sys_id,number" \
