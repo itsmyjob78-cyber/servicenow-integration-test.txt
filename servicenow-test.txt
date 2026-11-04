@@ -1,0 +1,2 @@
+Testing GitHub Actions integration with ServiceNow.
+This PR will validate automatic Change Request creation.
