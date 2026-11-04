@@ -67,6 +67,11 @@ fi
 
 LOOKUP=$(curl -sS --get --user "${SN_USER}:${SN_PASS}" --header "Accept: application/json" "${API}" --data-urlencode "sysparm_query=correlation_id=${PR_URL}" --data-urlencode "sysparm_fields=sys_id,number" --data-urlencode "sysparm_limit=1")
 
+echo "Checking ServiceNow API..."
+echo "API endpoint: ${API}"
+
+LOOKUP=$(curl -sS --get --user "${SN_USER}:${SN_PASS}" --header "Accept: application/json" "${API}" --data-urlencode "sysparm_query=correlation_id=${PR_URL}" --data-urlencode "sysparm_fields=sys_id,number" --data-urlencode "sysparm_limit=1")
+
 echo "ServiceNow lookup completed."
 
 SYS_ID=$(echo "${LOOKUP}" | jq -r '.result[0].sys_id // empty')
@@ -134,3 +139,7 @@ CHG_NUM=$(echo "${LOOKUP}" | jq -r '.result[0].number // empty')
           else
             echo "A ServiceNow change already exists: ${CHG_NUM}. No duplicate created."
           fi
+curl --fail --silent --show-error \
+  --user "${SN_USER}:${SN_PASS}" \
+  --header "Accept: application/json" \
+  "${API}"
