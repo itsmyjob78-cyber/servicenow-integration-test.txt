@@ -1,0 +1,125 @@
+
+name: PR to ServiceNow Change Sync
+
+on:
+  pull_request:
+    types: [opened, labeled, closed]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: servicenow-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  sync-servicenow:
+    if: >-
+      contains(github.event.pull_request.labels.*.name, 'servicenow-change')
+      || github.event.action == 'closed'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Create or update ServiceNow change
+        env:
+          SN_INSTANCE: ${{ vars.SN_INSTANCE }}
+          SN_USER: ${{ secrets.SN_USER }}
+          SN_PASS: ${{ secrets.SN_PASS }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_REPO: ${{ github.repository }}
+          PR_ACTION: ${{ github.event.action }}
+          PR_MERGED: ${{ github.event.pull_request.merged }}
+          PR_MERGED_AT: ${{ github.event.pull_request.merged_at }}
+          MERGED_BY: ${{ github.actor }}
+          GH_TOKEN: ${{ github.token }}
+
+        run: |
+          set -euo pipefail
+
+          : "${SN_INSTANCE:?Missing SN_INSTANCE variable}"
+          : "${SN_USER:?Missing SN_USER secret}"
+          : "${SN_PASS:?Missing SN_PASS secret}"
+
+          API="${SN_INSTANCE%/}/api/now/table/change_request"
+
+          LOOKUP=$(curl --fail --silent --show-error --get \
+            --user "${SN_USER}:${SN_PASS}" \
+            --header "Accept: application/json" \
+            "${API}" \
+            --data-urlencode "sysparm_query=correlation_id=${PR_URL}" \
+            --data-urlencode "sysparm_fields=sys_id,number" \
+            --data-urlencode "sysparm_limit=1")
+
+          SYS_ID=$(echo "${LOOKUP}" | jq -r '.result[0].sys_id // empty')
+          CHG_NUM=$(echo "${LOOKUP}" | jq -r '.result[0].number // empty')
+
+          if [ "${PR_ACTION}" = "closed" ]; then
+            if [ "${PR_MERGED}" = "true" ] && [ -n "${SYS_ID}" ]; then
+              MERGE_NOTE=$(printf \
+                'GitHub PR #%s was merged.\nRepository: %s\nPR: %s\nMerged by: %s\nMerged at: %s' \
+                "${PR_NUMBER}" "${PR_REPO}" "${PR_URL}" "${MERGED_BY}" "${PR_MERGED_AT}")
+
+              PAYLOAD=$(jq -n --arg note "${MERGE_NOTE}" '{work_notes: $note}')
+
+              curl --fail --silent --show-error -X PATCH \
+                --user "${SN_USER}:${SN_PASS}" \
+                --header "Content-Type: application/json" \
+                --header "Accept: application/json" \
+                "${API}/${SYS_ID}" \
+                --data "${PAYLOAD}" > /dev/null
+
+              echo "Updated ${CHG_NUM}. ServiceNow change remains open."
+            else
+              echo "PR was not merged or no linked change was found. No update made."
+            fi
+            exit 0
+          fi
+
+          if [ -z "${SYS_ID}" ]; then
+            DESCRIPTION=$(printf \
+              'Repository: %s\nPull Request: %s\nAuthor: %s\nSource branch: %s\nTarget branch: %s\n\nPR description:\n%s' \
+              "${PR_REPO}" "${PR_URL}" "${PR_AUTHOR}" "${PR_BRANCH}" "${PR_BASE}" "${PR_BODY}")
+
+            PAYLOAD=$(jq -n \
+              --arg short_description "GitHub PR #${PR_NUMBER}: ${PR_TITLE}" \
+              --arg description "${DESCRIPTION}" \
+              --arg correlation_id "${PR_URL}" \
+              '{
+                short_description: $short_description,
+                description: $description,
+                correlation_id: $correlation_id,
+                type: "Standard"
+              }')
+
+            RESPONSE=$(curl --fail --silent --show-error -X POST \
+              --user "${SN_USER}:${SN_PASS}" \
+              --header "Content-Type: application/json" \
+              --header "Accept: application/json" \
+              "${API}" \
+              --data "${PAYLOAD}")
+
+            CHG_NUM=$(echo "${RESPONSE}" | jq -r '.result.number // empty')
+            SYS_ID=$(echo "${RESPONSE}" | jq -r '.result.sys_id // empty')
+
+            if [ -z "${CHG_NUM}" ] || [ -z "${SYS_ID}" ]; then
+              echo "ServiceNow did not return a change number or sys_id."
+              echo "${RESPONSE}" | jq .
+              exit 1
+            fi
+
+            SN_URL="${SN_INSTANCE%/}/change_request.do?sys_id=${SYS_ID}"
+
+            gh pr comment "${PR_URL}" --body "ServiceNow Change Request created: [${CHG_NUM}](${SN_URL}). The change will remain open after this PR is merged."
+
+            echo "Created ServiceNow Change: ${CHG_NUM}"
+          else
+            echo "A ServiceNow change already exists: ${CHG_NUM}. No duplicate created."
+          fi
