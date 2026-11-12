@@ -1,4 +1,3 @@
-
 name: PR to ServiceNow Change Sync
 
 on:
@@ -109,7 +108,9 @@ jobs:
             echo "No duplicate created."
             exit 0
           fi
-PLANNED_START=$(date -u '+%Y-%m-%d %H:%M:%S')
+
+          PLANNED_START=$(date -u '+%Y-%m-%d %H:%M:%S')
+
           DESCRIPTION=$(printf \
             'Repository: %s\nPull Request: %s\nAuthor: %s\nSource branch: %s\nTarget branch: %s\n\nPR description:\n%s' \
             "$PR_REPO" "$PR_URL" "$PR_AUTHOR" \
