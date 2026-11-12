@@ -27,6 +27,8 @@ jobs:
       - name: Create or update ServiceNow Change Request
         env:
           SN_INSTANCE: ${{ vars.SN_INSTANCE }}
+          SN_CI_SYS_ID: f58112fc8324d750bfeb66d0deaad3d5
+          SN_GROUP_SYS_ID: 2024def08364d750bfeb66d0deaad3c8
           SN_CLIENT_ID: ${{ secrets.SN_CLIENT_ID }}
           SN_CLIENT_SECRET: ${{ secrets.SN_CLIENT_SECRET }}
           PR_URL: ${{ github.event.pull_request.html_url }}
@@ -107,24 +109,32 @@ jobs:
             echo "No duplicate created."
             exit 0
           fi
-
+PLANNED_START=$(date -u '+%Y-%m-%d %H:%M:%S')
           DESCRIPTION=$(printf \
             'Repository: %s\nPull Request: %s\nAuthor: %s\nSource branch: %s\nTarget branch: %s\n\nPR description:\n%s' \
             "$PR_REPO" "$PR_URL" "$PR_AUTHOR" \
             "$PR_BRANCH" "$PR_BASE" "$PR_BODY")
 
-          PAYLOAD=$(jq -n \
+         PAYLOAD=$(jq -n \
             --arg title "GitHub PR #${PR_NUMBER}: ${PR_TITLE}" \
             --arg description "$DESCRIPTION" \
             --arg correlation "$PR_URL" \
+            --arg ci "$SN_CI_SYS_ID" \
+            --arg group "$SN_GROUP_SYS_ID" \
+            --arg planned_start "$PLANNED_START" \
             '{
               short_description: $title,
               description: $description,
               correlation_id: $correlation,
               type: "normal",
               category: "Other",
+              cmdb_ci: $ci,
+              assignment_group: $group,
+              start_date: $planned_start,
               impact: "3",
-              urgency: "3"
+              urgency: "3",
+              priority: "4",
+              risk: "3"
             }')
 
           RESPONSE=$(curl --fail-with-body -sS -X POST "${API}" \
