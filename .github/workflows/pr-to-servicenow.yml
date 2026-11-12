@@ -115,7 +115,7 @@ PLANNED_START=$(date -u '+%Y-%m-%d %H:%M:%S')
             "$PR_REPO" "$PR_URL" "$PR_AUTHOR" \
             "$PR_BRANCH" "$PR_BASE" "$PR_BODY")
 
-         PAYLOAD=$(jq -n \
+          PAYLOAD=$(jq -n \
             --arg title "GitHub PR #${PR_NUMBER}: ${PR_TITLE}" \
             --arg description "$DESCRIPTION" \
             --arg correlation "$PR_URL" \
